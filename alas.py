@@ -8,6 +8,7 @@ import inflection
 from cached_property import cached_property
 
 from module.base.decorator import del_cached_property
+from module.base.error_log import prune_error_logs
 from module.config.config import AzurLaneConfig, TaskEnd
 from module.config.deep import deep_get, deep_set
 from module.exception import *
@@ -64,6 +65,7 @@ class AzurLaneAutoScript:
 
     def run(self, command, skip_first_screenshot=False):
         try:
+            self.device.screenshot_interval_set()
             if not skip_first_screenshot:
                 self.device.screenshot()
             self.__getattribute__(command)()
@@ -134,8 +136,9 @@ class AzurLaneAutoScript:
 
     def save_error_log(self):
         """
-        Save last 60 screenshots in ./log/error/<timestamp>
+        Save cached screenshots in ./log/error/<timestamp>
         Save logs to ./log/error/<timestamp>/log.txt
+        Keep the latest 10 error reports after a successful save.
         """
         from module.base.utils import save_image
         from module.handler.sensitive_info import (handle_sensitive_image,
@@ -161,6 +164,7 @@ class AzurLaneAutoScript:
                 lines = handle_sensitive_logs(lines)
             with open(f'{folder}/log.txt', 'w', encoding='utf-8') as f:
                 f.writelines(lines)
+            prune_error_logs('./log/error')
 
     def restart(self):
         from module.handler.login import LoginHandler

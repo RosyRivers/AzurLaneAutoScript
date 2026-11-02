@@ -26,6 +26,8 @@ class Screenshot(Adb, WSA, DroidCast, AScreenCap, Scrcpy, NemuIpc, LDOpenGL):
     _screen_black_checked = False
     _minicap_uninstalled = False
     _screenshot_interval = Timer(0.1)
+    _screenshot_interval_base = 0.1
+    _screenshot_interval_fast_until = 0.
     _last_save_time = {}
     image: np.ndarray
 
@@ -53,6 +55,8 @@ class Screenshot(Adb, WSA, DroidCast, AScreenCap, Scrcpy, NemuIpc, LDOpenGL):
         Returns:
             np.ndarray:
         """
+        if self._screenshot_interval_fast_until and time.monotonic() >= self._screenshot_interval_fast_until:
+            self.screenshot_interval_set('confirmed')
         self._screenshot_interval.wait()
         self._screenshot_interval.reset()
 
@@ -61,18 +65,23 @@ class Screenshot(Adb, WSA, DroidCast, AScreenCap, Scrcpy, NemuIpc, LDOpenGL):
                 method = self.screenshot_method_override
             else:
                 method = self.config.Emulator_ScreenshotMethod
-            method = self.screenshot_methods.get(method, self.screenshot_adb)
-            self.image = method()
+            screenshot_method = self.screenshot_methods.get(method, self.screenshot_adb)
+            self.image = screenshot_method()
+            if method not in ['nemu_ipc', 'scrcpy']:
+                self._screen_size = tuple(sorted(image_size(self.image), reverse=True))
+            self.image = self._handle_orientated_image(self.image)
+            if image_size(self.image) != (1280, 720):
+                self._screen_size_checked = False
+            screen_size_valid = self.check_screen_size()
 
-            if self.config.Emulator_ScreenshotDedithering:
+            if self.config.Emulator_ScreenshotDedithering and image_size(self.image) == (1280, 720):
                 # This will take 40-60ms
                 cv2.fastNlMeansDenoising(self.image, self.image, h=17, templateWindowSize=1, searchWindowSize=2)
-            self.image = self._handle_orientated_image(self.image)
 
-            if self.config.Error_SaveError:
+            if self.config.Error_SaveError and image_size(self.image) == (1280, 720):
                 self.screenshot_deque.append({'time': datetime.now(), 'image': self.image})
 
-            if self.check_screen_size() and self.check_screen_black():
+            if screen_size_valid and self.check_screen_black():
                 break
             else:
                 continue
@@ -91,11 +100,13 @@ class Screenshot(Adb, WSA, DroidCast, AScreenCap, Scrcpy, NemuIpc, LDOpenGL):
         Returns:
             np.ndarray:
         """
-        width, height = image_size(self.image)
+        width, height = image_size(image)
         if width == 1280 and height == 720:
             return image
+        if width == 3840 and height == 2160:
+            return cv2.resize(image, (1280, 720), interpolation=cv2.INTER_AREA)
 
-        # Rotate screenshots only when they're not 1280x720
+        # Screenshot backends may already return a correctly oriented image.
         if self.orientation == 0:
             pass
         elif self.orientation == 1:
@@ -107,6 +118,8 @@ class Screenshot(Adb, WSA, DroidCast, AScreenCap, Scrcpy, NemuIpc, LDOpenGL):
         else:
             raise ScriptError(f'Invalid device orientation: {self.orientation}')
 
+        if image_size(image) == (3840, 2160):
+            image = cv2.resize(image, (1280, 720), interpolation=cv2.INTER_AREA)
         return image
 
     @cached_property
@@ -161,8 +174,21 @@ class Screenshot(Adb, WSA, DroidCast, AScreenCap, Scrcpy, NemuIpc, LDOpenGL):
             interval (int, float, str):
                 Minimum interval between 2 screenshots in seconds.
                 Or None for Optimization_ScreenshotInterval, 'combat' for Optimization_CombatScreenshotInterval
+                'wait' for noncritical loading, 'active' after input, 'confirmed' to end the input burst.
         """
-        if interval is None:
+        if '_screenshot_interval' not in self.__dict__:
+            self._screenshot_interval = Timer(0.1)
+        temporary = interval in ['active', 'confirmed']
+        if interval == 'active':
+            # Keep retries responsive without leaving ordinary tasks at high frequency forever.
+            self._screenshot_interval_fast_until = time.monotonic() + 2
+            interval = min(0.1, self._screenshot_interval_base)
+        elif interval == 'confirmed':
+            self._screenshot_interval_fast_until = 0.
+            interval = self._screenshot_interval_base
+        elif interval == 'wait':
+            interval = 0.5
+        elif interval is None:
             origin = self.config.Optimization_ScreenshotInterval
             interval = limit_in(origin, 0.1, 0.3)
             if interval != origin:
@@ -187,6 +213,9 @@ class Screenshot(Adb, WSA, DroidCast, AScreenCap, Scrcpy, NemuIpc, LDOpenGL):
         # video stream is received continuously no matter you use it or not.
         if self.config.Emulator_ScreenshotMethod == 'scrcpy':
             interval = 0.1
+        if not temporary:
+            self._screenshot_interval_base = interval
+            self._screenshot_interval_fast_until = 0.
 
         if interval != self._screenshot_interval.limit:
             logger.info(f'Screenshot interval set to {interval}s')
@@ -218,13 +247,13 @@ class Screenshot(Adb, WSA, DroidCast, AScreenCap, Scrcpy, NemuIpc, LDOpenGL):
             if width == 1280 and height == 720:
                 self._screen_size_checked = True
                 return True
-            elif not orientated and (width == 720 and height == 1280):
+            elif not orientated and (width, height) in [(720, 1280), (2160, 3840)]:
                 logger.info('Received orientated screenshot, handling')
                 self.get_orientation()
                 self.image = self._handle_orientated_image(self.image)
                 orientated = True
                 width, height = image_size(self.image)
-                if width == 720 and height == 1280:
+                if (width, height) in [(720, 1280), (2160, 3840)]:
                     logger.info('Unable to handle orientated screenshot, continue for now')
                     return True
                 else:
@@ -237,7 +266,7 @@ class Screenshot(Adb, WSA, DroidCast, AScreenCap, Scrcpy, NemuIpc, LDOpenGL):
                 return True
             else:
                 logger.critical(f'Resolution not supported: {width}x{height}')
-                logger.critical('Please set emulator resolution to 1280x720')
+                logger.critical('Please set emulator resolution to 1280x720 or 3840x2160')
                 raise RequestHumanTakeover
 
     def check_screen_black(self):

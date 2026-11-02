@@ -59,6 +59,10 @@ class ScreenshotDevice(object):
             '(skip_first_screenshot).'.format(self.file)
         )
 
+    def screenshot_interval_set(self, interval=None):
+        # Offline tests never poll the emulator.
+        pass
+
     def click(self, button, *args, **kwargs):
         self.clicks.append(button)
         self.click_record_add(button)

@@ -31,7 +31,8 @@ class LoginHandler(UI):
         """
         logger.hr('App login')
 
-        confirm_timer = Timer(1.5, count=4).start()
+        # Confirmation is time based even when login screenshots are infrequent.
+        confirm_timer = Timer(1.5).start()
         orientation_timer = Timer(5)
         login_success = False
         self.device.stuck_record_clear()

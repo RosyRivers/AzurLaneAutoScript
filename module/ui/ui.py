@@ -108,7 +108,7 @@ class UI(InfoHandler):
 
         click_timer = Timer(retry_wait, count=retry_wait // 0.5)
         confirm_wait = confirm_wait if additional is not None else 0
-        confirm_timer = Timer(confirm_wait, count=confirm_wait // 0.5).start()
+        confirm_timer = Timer(confirm_wait).start()
         while 1:
             if skip_first_screenshot:
                 skip_first_screenshot = False
@@ -117,6 +117,7 @@ class UI(InfoHandler):
 
             if self.ui_process_check_button(check_button, offset=offset):
                 if confirm_timer.reached():
+                    self.device.screenshot_interval_set()
                     break
             else:
                 confirm_timer.reset()
@@ -196,6 +197,7 @@ class UI(InfoHandler):
                 if self.ui_page_appear(page=page):
                     logger.attr("UI", page.name)
                     self.ui_current = page
+                    self.device.screenshot_interval_set()
                     return page
 
             # Unknown page but able to handle
@@ -256,6 +258,7 @@ class UI(InfoHandler):
             if self.ui_page_appear(page=destination, offset=offset):
                 logger.info(f'Page arrive: {destination}')
                 self.ui_current = destination
+                self.device.screenshot_interval_set()
                 break
 
             # Other pages

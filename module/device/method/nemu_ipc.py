@@ -185,6 +185,9 @@ def retry(func):
             # Function call timeout
             except JobTimeout:
                 logger.warning(f'Func {func.__name__}() call timeout, retrying: {_}')
+                if func.__name__ == 'screenshot':
+                    # A timed-out native call may still be writing its old buffer.
+                    self._pixels_pointer = None
 
                 def init():
                     pass
@@ -255,6 +258,7 @@ class NemuIpcImpl:
         self.connect_id: int = 0
         self.width = 0
         self.height = 0
+        self._pixels_pointer = None
 
     def connect(self, on_thread=True):
         if self.connect_id > 0:
@@ -290,6 +294,7 @@ class NemuIpcImpl:
 
         # logger.info(f'NemuIpc disconnected: {self.connect_id}')
         self.connect_id = 0
+        self._pixels_pointer = None
 
     def reconnect(self):
         self.disconnect()
@@ -369,7 +374,9 @@ class NemuIpcImpl:
         width_ptr = ctypes.pointer(ctypes.c_int(self.width))
         height_ptr = ctypes.pointer(ctypes.c_int(self.height))
         length = self.width * self.height * 4
-        pixels_pointer = ctypes.pointer((ctypes.c_ubyte * length)())
+        if self._pixels_pointer is None or len(self._pixels_pointer.contents) != length:
+            self._pixels_pointer = ctypes.pointer((ctypes.c_ubyte * length)())
+        pixels_pointer = self._pixels_pointer
 
         ret = self.lib.nemu_capture_display(
             self.connect_id, self.display_id, length, width_ptr, height_ptr, pixels_pointer,
@@ -390,6 +397,7 @@ class NemuIpcImpl:
         Returns:
             np.ndarray: Image array in RGBA color space
                 Note that image is upside down
+                The raw buffer is reused by the next capture; normalize or copy before retaining it.
         """
         if self.connect_id == 0:
             self.connect()
@@ -597,19 +605,23 @@ class NemuIpc(Platform):
     def screenshot_nemu_ipc(self):
         image = self.nemu_ipc.screenshot()
 
+        height, width = image.shape[:2]
+        self._screen_size = (max(width, height), min(width, height))
+        if (width, height) == (3840, 2160):
+            image = cv2.resize(image, (1280, 720), interpolation=cv2.INTER_AREA)
         image = cv2.cvtColor(image, cv2.COLOR_RGBA2RGB)
         cv2.flip(image, 0, dst=image)
         return image
 
     def click_nemu_ipc(self, x, y):
         down = ensure_time((0.010, 0.020))
-        self.nemu_ipc.down(x, y)
+        self.nemu_ipc.down(*self.control_point(x, y))
         self.sleep(down)
         self.nemu_ipc.up()
         self.sleep(0.050 - down)
 
     def long_click_nemu_ipc(self, x, y, duration=1.0):
-        self.nemu_ipc.down(x, y)
+        self.nemu_ipc.down(*self.control_point(x, y))
         self.sleep(duration)
         self.nemu_ipc.up()
         self.sleep(0.050)
@@ -618,7 +630,7 @@ class NemuIpc(Platform):
         points = insert_swipe(p0=p1, p3=p2)
 
         for point in points:
-            self.nemu_ipc.down(*point)
+            self.nemu_ipc.down(*self.control_point(*point))
             self.sleep(0.010)
 
         self.nemu_ipc.up()
@@ -630,17 +642,17 @@ class NemuIpc(Platform):
         points = insert_swipe(p0=p1, p3=p2, speed=20)
 
         for point in points:
-            self.nemu_ipc.down(*point)
+            self.nemu_ipc.down(*self.control_point(*point))
             self.sleep(0.010)
 
-        self.nemu_ipc.down(*p2)
+        self.nemu_ipc.down(*self.control_point(*p2))
         self.sleep(0.140)
-        self.nemu_ipc.down(*p2)
+        self.nemu_ipc.down(*self.control_point(*p2))
         self.sleep(0.140)
 
         hold_duration = ensure_time(hold_duration) - 0.28
         if hold_duration > 0:
-            self.nemu_ipc.down(*p2)
+            self.nemu_ipc.down(*self.control_point(*p2))
             self.sleep(hold_duration)
 
         self.nemu_ipc.up()

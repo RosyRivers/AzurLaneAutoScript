@@ -45,6 +45,7 @@ class Control(Hermit, Minitouch, Scrcpy, MaaTouch, NemuIpc):
             self.click_adb
         )
         method(x, y)
+        self.screenshot_interval_set('active')
 
     def multi_click(self, button, n, interval=(0.1, 0.2)):
         self.handle_control_check(button)
@@ -84,6 +85,7 @@ class Control(Hermit, Minitouch, Scrcpy, MaaTouch, NemuIpc):
             self.long_click_nemu_ipc(x, y, duration)
         else:
             self.swipe_adb((x, y), (x, y), duration)
+        self.screenshot_interval_set('active')
 
     def swipe(self, p1, p2, duration=(0.1, 0.2), name='SWIPE', distance_check=True):
         self.handle_control_check(name)
@@ -118,6 +120,7 @@ class Control(Hermit, Minitouch, Scrcpy, MaaTouch, NemuIpc):
             self.swipe_nemu_ipc(p1, p2)
         else:
             self.swipe_adb(p1, p2, duration=duration)
+        self.screenshot_interval_set('active')
 
     def swipe_vector(self, vector, box=(123, 159, 1175, 628), random_range=(0, 0, 0, 0), padding=15,
                      duration=(0.1, 0.2), whitelist_area=None, blacklist_area=None, name='SWIPE', distance_check=True):
@@ -175,3 +178,4 @@ class Control(Hermit, Minitouch, Scrcpy, MaaTouch, NemuIpc):
             if hold_duration > 0:
                 self.sleep(hold_duration)
             self.click(Button(area=(), color=(), button=area_offset(point_random, p2), name=name), False)
+        self.screenshot_interval_set('active')

@@ -180,7 +180,9 @@ class Adb(Connection):
         return load_screencap(data)
 
     @retry
-    def click_adb(self, x, y):
+    def click_adb(self, x, y, native=False):
+        if not native:
+            x, y = self.control_point(x, y)
         start = time.time()
         self.adb_shell(['input', 'tap', x, y])
         if time.time() - start <= 0.05:
@@ -188,6 +190,7 @@ class Adb(Connection):
 
     @retry
     def swipe_adb(self, p1, p2, duration=0.1):
+        p1, p2 = self.control_point(*p1), self.control_point(*p2)
         duration = int(duration * 1000)
         self.adb_shell(['input', 'swipe', *p1, *p2, duration])
 

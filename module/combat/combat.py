@@ -269,7 +269,7 @@ class Combat(Level, HPBalancer, Retirement, SubmarineCall, CombatAuto, CombatMan
             # slow down the screenshot interval earlier
             if not interval_set:
                 if self.is_combat_loading():
-                    self.device.screenshot_interval_set('combat')
+                    self.device.screenshot_interval_set('wait')
                     interval_set = True
 
             # End
@@ -278,9 +278,7 @@ class Combat(Level, HPBalancer, Retirement, SubmarineCall, CombatAuto, CombatMan
                 logger.attr('BattleUI', pause)
                 if emotion_reduce:
                     self.emotion.reduce(fleet_index)
-                # fallback slow down if is_combat_loading() not detected
-                if not interval_set:
-                    self.device.screenshot_interval_set('combat')
+                self.device.screenshot_interval_set('combat')
                 break
 
     def handle_battle_preparation(self):

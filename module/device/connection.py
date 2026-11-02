@@ -108,6 +108,13 @@ class AdbDeviceWithStatus(AdbDevice):
 
 
 class Connection(ConnectionAttr):
+    # Native display dimensions; task images and coordinates remain 1280x720.
+    _screen_size = (1280, 720)
+
+    def control_point(self, x, y):
+        width, height = self._screen_size
+        return int(x * width / 1280), int(y * height / 720)
+
     def __init__(self, config):
         """
         Args:

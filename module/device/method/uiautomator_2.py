@@ -136,14 +136,17 @@ class Uiautomator2(Connection):
 
     @retry
     def click_uiautomator2(self, x, y):
+        x, y = self.control_point(x, y)
         self.u2.click(x, y)
 
     @retry
     def long_click_uiautomator2(self, x, y, duration=(1, 1.2)):
+        x, y = self.control_point(x, y)
         self.u2.long_click(x, y, duration=duration)
 
     @retry
     def swipe_uiautomator2(self, p1, p2, duration=0.1):
+        p1, p2 = self.control_point(*p1), self.control_point(*p2)
         self.u2.swipe(*p1, *p2, duration=duration)
 
     @retry
@@ -175,6 +178,7 @@ class Uiautomator2(Connection):
         length = len(path)
         for index, data in enumerate(path):
             x, y, second = data
+            x, y = self.control_point(x, y)
             if index == 0:
                 self.u2.touch.down(x, y)
                 logger.info(point2str(x, y) + ' down')
@@ -426,17 +430,16 @@ class Uiautomator2(Connection):
             (width, height)
 
         Raises:
-            RequestHumanTakeover: If resolution is not 1280x720
+            RequestHumanTakeover: If resolution is neither 1280x720 nor 3840x2160
         """
         width, height = self.resolution_uiautomator2()
         logger.attr('Screen_size', f'{width}x{height}')
-        if width == 1280 and height == 720:
-            return (width, height)
-        if width == 720 and height == 1280:
+        self._screen_size = (max(width, height), min(width, height))
+        if self._screen_size in [(1280, 720), (3840, 2160)]:
             return (width, height)
 
         logger.critical(f'Resolution not supported: {width}x{height}')
-        logger.critical('Please set emulator resolution to 1280x720')
+        logger.critical('Please set emulator resolution to 1280x720 or 3840x2160')
         raise RequestHumanTakeover
 
     @retry

@@ -173,6 +173,7 @@ class RewardDorm(UI):
     def _dorm_feed_long_tap(self, button, count):
         timeout = Timer(count // 5 + 5).start()
         x, y = random_rectangle_point(button.button)
+        x, y = self.device.control_point(x, y)
         self.device.u2.touch.down(x, y)
 
         while 1:
@@ -194,6 +195,7 @@ class RewardDorm(UI):
     def _dorm_feed_long_tap(self, button, count):
         timeout = Timer(count // 5 + 5).start()
         x, y = random_rectangle_point(button.button)
+        x, y = self.device.control_point(x, y)
 
         while 1:
             self.device.nemu_ipc.down(x, y)
