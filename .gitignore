@@ -140,6 +140,9 @@ pip-delete-this-directory.txt
 htmlcov/
 .tox/
 .nox/
+doc/
+docs/
+tests
 .coverage
 .coverage.*
 .cache
