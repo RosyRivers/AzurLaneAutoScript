@@ -1,6 +1,7 @@
 from module.base.button import ButtonGrid
 from module.base.timer import Timer
 from module.base.utils import *
+import module.config.server as server
 from module.config.utils import get_server_monthday
 from module.exception import GameBugError
 from module.guild.assets import *
@@ -349,6 +350,31 @@ class GuildOperations(GuildBase):
                 self.device.sleep((0.5, 0.6))
                 continue
 
+    def _guild_dispatch_appear(self, button):
+        if server.server != 'cn' or getattr(self.device, '_screen_size', None) != (3840, 2160):
+            if not self.match_template_color(button, offset=(20, 20), interval=3):
+                return False
+            if button == GUILD_DISPATCH_FLEET and not self.image_color_count(
+                    button, color=(82, 93, 221), threshold=20, count=500):
+                self.interval_clear(button)
+                return False
+            return True
+
+        self.device.stuck_record_add(button)
+        timer = self.get_interval_timer(button, interval=3, renew=True)
+        if not timer.reached() or not self.appear(GUILD_DISPATCH_RECOMMEND, offset=(20, 20)):
+            return False
+
+        # The text matches both states. Check the solid background to its left.
+        offset = np.subtract(GUILD_DISPATCH_RECOMMEND.button, GUILD_DISPATCH_RECOMMEND.area)[:2]
+        area = area_offset((950, 643, 975, 666), offset)
+        color = (81, 94, 222) if button == GUILD_DISPATCH_FLEET else (71, 82, 193)
+        if not self.image_color_count(area, color=color, threshold=12, count=459):
+            return False
+        button.load_offset(GUILD_DISPATCH_RECOMMEND)
+        timer.reset()
+        return True
+
     def _guild_operations_dispatch_execute(self, skip_first_screenshot=True):
         """
         Executes the dispatch sequence
@@ -364,18 +390,12 @@ class GuildOperations(GuildBase):
             else:
                 self.device.screenshot()
 
-            if self.appear(GUILD_DISPATCH_FLEET_UNFILLED, offset=(20, 20), interval=3):
-                # Don't use offset here, because GUILD_DISPATCH_FLEET_UNFILLED only has a difference in colors
+            if self._guild_dispatch_appear(GUILD_DISPATCH_FLEET_UNFILLED):
                 # Use long interval because the game needs a few seconds to choose the ships
                 self.device.click(GUILD_DISPATCH_RECOMMEND)
                 continue
-            if not dispatched and self.appear(GUILD_DISPATCH_FLEET, offset=(20, 20), interval=3):
-                # GUILD_DISPATCH_FLEET and GUILD_DISPATCH_FLEET_UNFILLED has same feature but different colors
-                # check background blue for double check
-                if self.image_color_count(GUILD_DISPATCH_FLEET, color=(82, 93, 221), threshold=20, count=500):
-                    self.device.click(GUILD_DISPATCH_FLEET)
-                else:
-                    self.interval_clear(GUILD_DISPATCH_FLEET)
+            if not dispatched and self._guild_dispatch_appear(GUILD_DISPATCH_FLEET):
+                self.device.click(GUILD_DISPATCH_FLEET)
                 continue
             if self.handle_popup_confirm('GUILD_DISPATCH'):
                 self.interval_clear(GUILD_DISPATCH_FLEET)
@@ -387,16 +407,11 @@ class GuildOperations(GuildBase):
                 # In first dispatch, it will show GUILD_DISPATCH_IN_PROGRESS
                 logger.info('Fleet dispatched, dispatch in progress')
                 break
-            if dispatched and self.appear(GUILD_DISPATCH_FLEET, offset=(20, 20), interval=3):
-                # GUILD_DISPATCH_FLEET and GUILD_DISPATCH_FLEET_UNFILLED has same feature but different colors
-                # check background blue for double check
-                if self.image_color_count(GUILD_DISPATCH_FLEET, color=(82, 93, 221), threshold=20, count=500):
-                    # In the rest of the dispatch, it will show GUILD_DISPATCH_FLEET
-                    # We can't ensure that fleet has dispatched,
-                    # because GUILD_DISPATCH_FLEET still shows after clicking recommend before dispatching
-                    # _guild_operations_dispatch() will retry it if haven't dispatched
-                    logger.info('Fleet dispatched')
-                    break
+            if dispatched and self._guild_dispatch_appear(GUILD_DISPATCH_FLEET):
+                # Subsequent dispatches return to the fleet selection page.
+                # _guild_operations_dispatch() will retry if the fleet was not dispatched.
+                logger.info('Fleet dispatched')
+                break
 
     def _guild_operations_dispatch_exit(self, skip_first_screenshot=True):
         """
