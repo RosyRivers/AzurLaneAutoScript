@@ -170,7 +170,8 @@ class MissionHandler(GlobeOperation, ZoneManager):
         """
         logger.hr('OS mission overview accept', level=1)
         # is_in_map
-        self.os_map_goto_globe(unpin=False)
+        self.os_map_goto_globe(
+            unpin=False, ready=lambda: self.appear(MISSION_OVERVIEW_ENTER, offset=(200, 20)))
         # is_in_globe
         self.ui_click(MISSION_OVERVIEW_ENTER, check_button=MISSION_OVERVIEW_CHECK,
                       offset=(200, 20), retry_wait=3, additional=self.handle_manjuu,

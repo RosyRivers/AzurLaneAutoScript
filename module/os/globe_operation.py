@@ -279,10 +279,11 @@ class GlobeOperation(ActionPointHandler):
         return self.ui_click(GLOBE_GOTO_MAP, check_button=self.is_in_map, offset=(20, 20),
                              retry_wait=3, skip_first_screenshot=skip_first_screenshot)
 
-    def os_map_goto_globe(self, unpin=True):
+    def os_map_goto_globe(self, unpin=True, ready=None):
         """
         Args:
             unpin (bool):
+            ready (callable): Readiness check to use instead of is_zone_pinned when unpin is False.
 
         Pages:
             in: is_in_map
@@ -334,9 +335,8 @@ class GlobeOperation(ActionPointHandler):
                 else:
                     if unpinned and confirm_timer.reached():
                         break
-            else:
-                if self.is_zone_pinned():
-                    break
+            elif (ready or self.is_zone_pinned)():
+                break
 
     def globe_enter(self, zone):
         """
